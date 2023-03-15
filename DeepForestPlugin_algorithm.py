@@ -30,18 +30,14 @@ __copyright__ = '(C) 2023 by PXL Smart ICT'
 
 __revision__ = '$Format:%H$'
 
-from osgeo import gdal
 import numpy as np
 from PIL import Image
+from osgeo import gdal
 from qgis.PyQt.QtCore import QCoreApplication
-from qgis.core import (QgsProcessing,
-                       QgsFeatureSink,
-                       QgsVectorLayer,
-                       QgsProcessingAlgorithm,
+from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFileDestination,
-                       QgsProcessingParameterNumber,
-                       QgsPointXY)
+                       QgsProcessingParameterNumber)
 
 
 # https://www.qgistutorials.com/en/docs/3/processing_python_plugin.html
@@ -132,33 +128,28 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         window_size = self.parameterAsInt(parameters, self.INPUT_LIMIT, context)
         dest_file = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
 
+        print('Window size: ', window_size)
+        print('Layer: ' + str(source_layer))
+        print('Dimensions: ', source_layer.width(), ' x ', source_layer.height())
+        # rect = source_layer.extent()
+        # print('Extent: ' + str(rect))
+
         source_provider = source_layer.dataProvider()
         ds_uri = str(source_provider.dataSourceUri())
-        gdal_dsm = gdal.Open(ds_uri)
+        ds = gdal.Open(ds_uri)
 
-        print(str(source_layer))
-        print(source_layer.width(), source_layer.height())
-        rect = source_layer.extent()
-        print(rect)
-        print(rect.width())
-        print(rect.height())
-
-        ds = gdal.Open(source_layer.dataProvider().dataSourceUri())
-        print('RasterCount  ' + str(ds.RasterCount))
+        print('RasterCount  ', ds.RasterCount, ' bands')
         arr_1 = ds.GetRasterBand(1).ReadAsArray()
         arr_2 = ds.GetRasterBand(2).ReadAsArray()
         arr_3 = ds.GetRasterBand(3).ReadAsArray()
         three_band = np.array([arr_1, arr_2, arr_3])
-        print(three_band.shape)
-        # three_band = np.swapaxes(three_band, 0, 2)
-        # three_band = np.swapaxes(three_band, 0, 1)
         three_band = np.transpose(three_band, (1, 2, 0))
-        print(three_band.shape)
+
+        print('Image (W,H,D): ' + str(three_band.shape))
 
         # val, res = source_layer.dataProvider().sample(QgsPointXY(679623, 5641193), 1)
 
-        print(str(window_size))
-        print(str(dest_file))
+        print('Destination file: ', dest_file)
 
         img = Image.fromarray(three_band, 'RGB')
         img.save(dest_file)
@@ -180,13 +171,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         #
         #     # Update the progress bar
         #     feedback.setProgress(int(current * total))
-
-        # Return the results of the algorithm. In this case our only result is
-        # the feature sink which contains the processed features, but some
-        # algorithms may return multiple feature sinks, calculated numeric
-        # statistics, etc. These should all be included in the returned
-        # dictionary, with keys matching the feature corresponding parameter
-        # or output names.
 
         # TODO: write JSON file
         # TODO: return as output
