@@ -159,8 +159,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             slice_1 = math.ceil(three_band.shape[1] / part_count_1)
             for x in range(0, three_band.shape[0], slice_0):
                 for y in range(0, three_band.shape[1], slice_1):
+                    if feedback.isCanceled():
+                        break
                     part = three_band[x:(x + slice_0), y:(y + slice_1), 0:3]
-                    # print('part (W,H,D): ' + str(part.shape))
                     img = Image.fromarray(part, 'RGB')
                     file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
                     img.save(file_name)
@@ -168,22 +169,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                     feedback.setProgress(int(count / total * 100))
 
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
-        #
-        # # Compute the number of steps to display within the progress bar and
-        # # get features from source
-        # total = 100.0 / source.featureCount() if source.featureCount() else 0
-        # features = source.getFeatures()
-        #
-        # for current, feature in enumerate(features):
-        #     # Stop the algorithm if cancel button has been clicked
-        #     if feedback.isCanceled():
-        #         break
-        #
         #     # Add a feature in the sink
         #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
-        #
-        #     # Update the progress bar
-        #     feedback.setProgress(int(current * total))
 
         # TODO: write JSON file
         # TODO: return as output
