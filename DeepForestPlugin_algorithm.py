@@ -33,10 +33,11 @@ __revision__ = '$Format:%H$'
 import numpy as np
 from PIL import Image
 from osgeo import gdal
+import math
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
-                       QgsProcessingParameterFileDestination,
+                       QgsProcessingParameterFolderDestination,
                        QgsProcessingParameterNumber)
 
 
@@ -100,11 +101,11 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         # usually takes the form of a newly created vector layer when the
         # algorithm is run in QGIS).
         self.addParameter(
-            QgsProcessingParameterFileDestination(
+            QgsProcessingParameterFolderDestination(
                 self.OUTPUT,
-                self.tr('Output file'),
+                self.tr('Output folder'),
                 optional=False,
-                fileFilter='Image files (*.png)'
+                # fileFilter='Image files (*.png)'
                 # fileFilter='GeoJSON files (*.json)'
             )
         )
@@ -144,15 +145,27 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         arr_3 = ds.GetRasterBand(3).ReadAsArray()
         three_band = np.array([arr_1, arr_2, arr_3])
         three_band = np.transpose(three_band, (1, 2, 0))
-
         print('Image (W,H,D): ' + str(three_band.shape))
-
-        # val, res = source_layer.dataProvider().sample(QgsPointXY(679623, 5641193), 1)
-
         print('Destination file: ', dest_file)
 
-        img = Image.fromarray(three_band, 'RGB')
-        img.save(dest_file)
+        slicing = 3500
+        feedback.setProgress(0)
+        if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
+            part_count_0 = math.ceil(three_band.shape[0] / slicing)
+            part_count_1 = math.ceil(three_band.shape[1] / slicing)
+            total = part_count_0 * part_count_1
+            count = 0
+            slice_0 = math.ceil(three_band.shape[0] / part_count_0)
+            slice_1 = math.ceil(three_band.shape[1] / part_count_1)
+            for x in range(0, three_band.shape[0], slice_0):
+                for y in range(0, three_band.shape[1], slice_1):
+                    part = three_band[x:(x + slice_0), y:(y + slice_1), 0:3]
+                    # print('part (W,H,D): ' + str(part.shape))
+                    img = Image.fromarray(part, 'RGB')
+                    file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
+                    img.save(file_name)
+                    count = count + 1
+                    feedback.setProgress(int(count / total * 100))
 
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
         #
