@@ -30,10 +30,12 @@ __copyright__ = '(C) 2023 by PXL Smart ICT'
 
 __revision__ = '$Format:%H$'
 
+import math
+
 import numpy as np
+import requests
 from PIL import Image
 from osgeo import gdal
-import math
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
@@ -163,10 +165,20 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                         break
                     part = three_band[x:(x + slice_0), y:(y + slice_1), 0:3]
                     img = Image.fromarray(part, 'RGB')
-                    file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
-                    img.save(file_name)
+                    png_file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
+                    img.save(png_file_name)
+
+                    with open(png_file_name, 'rb+') as png_file:
+                        files = {'file': png_file}
+                        resp = requests.post('http://10.125.93.137:5000/store', files=files)
+                        if resp.status_code == 200:
+                            png_file.write(resp.content)
+                        else:
+                            print('Error: ', resp.status_code)
+
                     count = count + 1
                     feedback.setProgress(int(count / total * 100))
+                break
 
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
         #     # Add a feature in the sink
