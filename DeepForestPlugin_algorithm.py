@@ -168,11 +168,14 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                     png_file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
                     img.save(png_file_name)
 
-                    with open(png_file_name, 'rb+') as png_file:
+                    with open(png_file_name, 'rb') as png_file:
                         files = {'file': png_file}
                         resp = requests.post('http://10.125.93.137:5000/store', files=files)
                         if resp.status_code == 200:
-                            png_file.write(resp.content)
+                            output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
+                            with open(output_file_name, 'wb') as out_file:
+                                out_file.write(resp.content)
+                            print('Written ', output_file_name)
                         else:
                             print('Error: ', resp.status_code)
 
