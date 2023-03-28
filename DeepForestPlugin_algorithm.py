@@ -167,7 +167,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                 with open(img_file_name, 'rb') as img_file:
                     files = {'file': img_file}
-                    resp = requests.post('http://10.125.93.137:5000/store', files=files)
+                    resp = requests.post('http://10.125.93.137:5000/tree_img', files=files)
                     if resp.status_code == 200:
                         output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
                         with open(output_file_name, 'wb') as out_file:
