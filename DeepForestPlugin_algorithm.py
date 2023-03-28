@@ -36,6 +36,10 @@ import numpy as np
 import requests
 from PIL import Image
 from osgeo import gdal
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+# from deepforest import main
+
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
@@ -47,14 +51,6 @@ from qgis.core import (QgsProcessingAlgorithm,
 # https://docs.qgis.org/3.22/en/docs/pyqgis_developer_cookbook/cheat_sheet.html#layers
 class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     """
-    This is an example algorithm that takes a vector layer and
-    creates a new identical one.
-
-    It is meant to be used as an example of how to create your own
-    algorithms and explain methods and variables used to do it. An
-    algorithm like this will be available in all elements, and there
-    is not need for additional work.
-
     All Processing algorithms should extend the QgsProcessingAlgorithm
     class.
     """
@@ -152,36 +148,37 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
         slicing = 3500
         feedback.setProgress(0)
-        if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
-            part_count_0 = math.ceil(three_band.shape[0] / slicing)
-            part_count_1 = math.ceil(three_band.shape[1] / slicing)
-            total = part_count_0 * part_count_1
-            count = 0
-            slice_0 = math.ceil(three_band.shape[0] / part_count_0)
-            slice_1 = math.ceil(three_band.shape[1] / part_count_1)
-            for x in range(0, three_band.shape[0], slice_0):
-                for y in range(0, three_band.shape[1], slice_1):
-                    if feedback.isCanceled():
-                        break
-                    part = three_band[x:(x + slice_0), y:(y + slice_1), 0:3]
-                    img = Image.fromarray(part, 'RGB')
-                    png_file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
-                    img.save(png_file_name)
+        # if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
+        part_count_0 = math.ceil(three_band.shape[0] / slicing)
+        part_count_1 = math.ceil(three_band.shape[1] / slicing)
+        total = part_count_0 * part_count_1
+        count = 0
+        slice_0 = math.ceil(three_band.shape[0] / part_count_0)
+        slice_1 = math.ceil(three_band.shape[1] / part_count_1)
+        for x in range(0, three_band.shape[0], slice_0):
+            for y in range(0, three_band.shape[1], slice_1):
+                if feedback.isCanceled():
+                    break
+                part = three_band[x:(x + slice_0), y:(y + slice_1), 0:3]
+                img = Image.fromarray(part, 'RGB')
+                img_file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.jpg'
+                img.save(img_file_name, quality=90, optimize=True, subsampling=0)
+                # img.save(png_file_name, optimize=True)
 
-                    with open(png_file_name, 'rb') as png_file:
-                        files = {'file': png_file}
-                        resp = requests.post('http://10.125.93.137:5000/store', files=files)
-                        if resp.status_code == 200:
-                            output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
-                            with open(output_file_name, 'wb') as out_file:
-                                out_file.write(resp.content)
-                            print('Written ', output_file_name)
-                        else:
-                            print('Error: ', resp.status_code)
+                with open(img_file_name, 'rb') as img_file:
+                    files = {'file': img_file}
+                    resp = requests.post('http://10.125.93.137:5000/store', files=files)
+                    if resp.status_code == 200:
+                        output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
+                        with open(output_file_name, 'wb') as out_file:
+                            out_file.write(resp.content)
+                        print('Written ', output_file_name)
+                    else:
+                        print('Error: ', resp.status_code)
 
-                    count = count + 1
-                    feedback.setProgress(int(count / total * 100))
-                break
+                count = count + 1
+                feedback.setProgress(int(count / total * 100))
+            break
 
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
         #     # Add a feature in the sink
