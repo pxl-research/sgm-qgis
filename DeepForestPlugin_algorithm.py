@@ -30,6 +30,7 @@ __copyright__ = '(C) 2023 by PXL Smart ICT'
 
 __revision__ = '$Format:%H$'
 
+import json
 import math
 
 import numpy as np
@@ -167,11 +168,13 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                 with open(img_file_name, 'rb') as img_file:
                     files = {'file': img_file}
-                    resp = requests.post('http://10.125.93.137:5000/tree_img', files=files)
+                    resp = requests.post('http://10.125.93.137:5000/tree_rects', files=files)
                     if resp.status_code == 200:
-                        output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
-                        with open(output_file_name, 'wb') as out_file:
-                            out_file.write(resp.content)
+                        print(resp.content)
+                        # output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
+                        output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.json'
+                        with open(output_file_name, 'wt') as out_file:
+                            out_file.write(resp.content.decode('utf-8'))
                         print('Written ', output_file_name)
                     else:
                         print('Error: ', resp.status_code)
