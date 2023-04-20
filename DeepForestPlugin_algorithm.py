@@ -37,15 +37,14 @@ import numpy as np
 import requests
 from PIL import Image
 from osgeo import gdal
-import matplotlib.patches as patches
-import matplotlib.pyplot as plt
-# from deepforest import main
-
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFolderDestination,
                        QgsProcessingParameterNumber)
+
+
+# from deepforest import main
 
 
 # https://www.qgistutorials.com/en/docs/3/processing_python_plugin.html
@@ -119,7 +118,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         """
 
         print('processAlgorithm')
-
+        feedback.setProgress(0)
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
@@ -127,18 +126,18 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         source_layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
         window_size = self.parameterAsInt(parameters, self.INPUT_LIMIT, context)
         dest_file = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
+        sl_rect = source_layer.extent()  # use to transform coordinates
 
         print('Window size: ', window_size)
         print('Layer: ' + str(source_layer))
         print('Dimensions: ', source_layer.width(), ' x ', source_layer.height())
-        # rect = source_layer.extent()
-        # print('Extent: ' + str(rect))
+        print('Extent: ', sl_rect.xMinimum(), sl_rect.yMinimum(), sl_rect.width(), sl_rect.height())
 
         source_provider = source_layer.dataProvider()
         ds_uri = str(source_provider.dataSourceUri())
         ds = gdal.Open(ds_uri)
-
         print('RasterCount  ', ds.RasterCount, ' bands')
+
         arr_1 = ds.GetRasterBand(1).ReadAsArray()
         arr_2 = ds.GetRasterBand(2).ReadAsArray()
         arr_3 = ds.GetRasterBand(3).ReadAsArray()
@@ -148,47 +147,118 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         print('Destination file: ', dest_file)
 
         slicing = 3500
-        feedback.setProgress(0)
+
         # if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
-        part_count_0 = math.ceil(three_band.shape[0] / slicing)
-        part_count_1 = math.ceil(three_band.shape[1] / slicing)
-        total = part_count_0 * part_count_1
+        sl_height = three_band.shape[0]
+        sl_width = three_band.shape[1]
+        part_count_v = math.ceil(sl_height / slicing)
+        part_count_h = math.ceil(sl_width / slicing)
+        slice_v = math.ceil(sl_height / part_count_v)
+        slice_h = math.ceil(sl_width / part_count_h)
+
+        print('Slice size: ', slice_v, ' by ', slice_h)
+
+        total = part_count_v * part_count_h
         count = 0
-        slice_0 = math.ceil(three_band.shape[0] / part_count_0)
-        slice_1 = math.ceil(three_band.shape[1] / part_count_1)
-        for x in range(0, three_band.shape[0], slice_0):
-            for y in range(0, three_band.shape[1], slice_1):
+        feature_list = []
+
+        for y0 in range(0, sl_height, slice_v):
+            for x0 in range(0, sl_width, slice_h):
                 if feedback.isCanceled():
                     break
-                part = three_band[x:(x + slice_0), y:(y + slice_1), 0:3]
+                y_max = y0 + slice_v
+                x_max = x0 + slice_h
+                part = three_band[y0:y_max, x0:x_max, 0:3]
                 img = Image.fromarray(part, 'RGB')
-                img_file_name = dest_file + '/part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.jpg'
+                img_file_name = dest_file + '/part_' + str(y_max) + '_' + str(x_max) + '.jpg'
                 img.save(img_file_name, quality=90, optimize=True, subsampling=0)
-                # img.save(png_file_name, optimize=True)
 
                 with open(img_file_name, 'rb') as img_file:
                     files = {'file': img_file}
                     resp = requests.post('http://10.125.93.137:5000/tree_rects', files=files)
                     if resp.status_code == 200:
-                        print(resp.content)
-                        # output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.png'
-                        output_file_name = dest_file + '/dt_part_' + str(x + slice_0) + '_' + str(y + slice_1) + '.json'
-                        with open(output_file_name, 'wt') as out_file:
-                            out_file.write(resp.content.decode('utf-8'))
-                        print('Written ', output_file_name)
+                        str_content = resp.content.decode('utf-8')
+                        json_boxes = json.loads(str_content)
+                        # transform these coordinates using extent
+                        # QGIS uses 0.0 at BOTTOM left corner instead of top!
+                        for b in range(0, len(json_boxes)):
+                            print(json_boxes[b])
+
+                            xmin = (x0 + json_boxes[b]['xmin']) / sl_width
+                            xmin = sl_rect.xMinimum() + (xmin * sl_rect.width())
+                            xmax = (x0 + json_boxes[b]['xmax']) / sl_width
+                            xmax = sl_rect.xMinimum() + (xmax * sl_rect.width())
+
+                            ymin = 1 - (y0 + json_boxes[b]['ymin']) / sl_height
+                            ymin = sl_rect.yMinimum() + (ymin * sl_rect.height())
+                            ymax = 1 - (y0 + json_boxes[b]['ymax']) / sl_height
+                            ymax = sl_rect.yMinimum() + (ymax * sl_rect.height())
+
+                            feature = {
+                                "type": "Feature",
+                                "geometry": {
+                                    "type": "Polygon",
+                                    "coordinates": [[
+                                        [xmin, ymin],
+                                        [xmin, ymax],
+                                        [xmax, ymax],
+                                        [xmax, ymin],
+                                        [xmin, ymin]
+                                    ]]
+                                },
+                                "properties": json_boxes[b]
+                            }
+
+                            feature_list.append(feature)
+
+                            output_file_name = dest_file + '/dt_part_' + str(y_max) + '_' + str(x_max) + '.json'
+                            with open(output_file_name, 'wt') as out_file:
+                                geo_json = {
+                                    'type': 'FeatureCollection',
+                                    'features': feature_list
+                                }
+                                out_file.write(json.dumps(geo_json, indent=1))
+                            print('Written ', output_file_name)
+
+                        break  # TODO: remove
                     else:
                         print('Error: ', resp.status_code)
 
                 count = count + 1
                 feedback.setProgress(int(count / total * 100))
-            break
+            break  # TODO: remove
 
+        print(geo_json)
+
+        # TODO: write JSON file
+
+        # GEOJSON EXAMPLE
+        # {
+        # 	"type": "Feature",
+        # 	"geometry": {
+        # 		"type": "Polygon",
+        # 		"coordinates": [
+        # 			[
+        # 				[100.0, 0.0],
+        # 				[101.0, 0.0],
+        # 				[101.0, 1.0],
+        # 				[100.0, 1.0],
+        # 				[100.0, 0.0]
+        # 			]
+        # 		]
+        # 	},
+        # 	"properties": {
+        # 		"prop0": "value0",
+        # 		"prop1": {
+        # 			"this": "that"
+        # 		}
+        # 	}
+        # }
+
+        # TODO: return as output
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
         #     # Add a feature in the sink
         #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
-
-        # TODO: write JSON file
-        # TODO: return as output
 
         return {self.OUTPUT: None}
 
