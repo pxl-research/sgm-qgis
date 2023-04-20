@@ -30,6 +30,7 @@ __copyright__ = '(C) 2023 by PXL Smart ICT'
 
 __revision__ = '$Format:%H$'
 
+import datetime
 import json
 import math
 
@@ -42,9 +43,6 @@ from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFolderDestination,
                        QgsProcessingParameterNumber)
-
-
-# from deepforest import main
 
 
 # https://www.qgistutorials.com/en/docs/3/processing_python_plugin.html
@@ -179,16 +177,15 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                     if resp.status_code == 200:
                         str_content = resp.content.decode('utf-8')
                         json_boxes = json.loads(str_content)
-                        # transform these coordinates using extent
-                        # QGIS uses 0.0 at BOTTOM left corner instead of top!
-                        for b in range(0, len(json_boxes)):
-                            print(json_boxes[b])
 
+                        for b in range(0, len(json_boxes)):
+                            # transform these coordinates using extent
                             xmin = (x0 + json_boxes[b]['xmin']) / sl_width
                             xmin = sl_rect.xMinimum() + (xmin * sl_rect.width())
                             xmax = (x0 + json_boxes[b]['xmax']) / sl_width
                             xmax = sl_rect.xMinimum() + (xmax * sl_rect.width())
 
+                            # QGIS uses 0.0 at BOTTOM left corner instead of top!
                             ymin = 1 - (y0 + json_boxes[b]['ymin']) / sl_height
                             ymin = sl_rect.yMinimum() + (ymin * sl_rect.height())
                             ymax = 1 - (y0 + json_boxes[b]['ymax']) / sl_height
@@ -208,52 +205,27 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                                 },
                                 "properties": json_boxes[b]
                             }
-
                             feature_list.append(feature)
-
-                            output_file_name = dest_file + '/dt_part_' + str(y_max) + '_' + str(x_max) + '.json'
-                            with open(output_file_name, 'wt') as out_file:
-                                geo_json = {
-                                    'type': 'FeatureCollection',
-                                    'features': feature_list
-                                }
-                                out_file.write(json.dumps(geo_json, indent=1))
-                            print('Written ', output_file_name)
-
-                        break  # TODO: remove
+                        # break  # TODO: remove
                     else:
                         print('Error: ', resp.status_code)
 
                 count = count + 1
+                print('Processed part: ', count, ' / ', total)
+
                 feedback.setProgress(int(count / total * 100))
-            break  # TODO: remove
+            # break  # TODO: remove
 
-        print(geo_json)
-
-        # TODO: write JSON file
-
-        # GEOJSON EXAMPLE
-        # {
-        # 	"type": "Feature",
-        # 	"geometry": {
-        # 		"type": "Polygon",
-        # 		"coordinates": [
-        # 			[
-        # 				[100.0, 0.0],
-        # 				[101.0, 0.0],
-        # 				[101.0, 1.0],
-        # 				[100.0, 1.0],
-        # 				[100.0, 0.0]
-        # 			]
-        # 		]
-        # 	},
-        # 	"properties": {
-        # 		"prop0": "value0",
-        # 		"prop1": {
-        # 			"this": "that"
-        # 		}
-        # 	}
-        # }
+        # write to file
+        current_datetime = datetime.datetime.now()
+        output_file_name = dest_file + '/trees_' + current_datetime.strftime("%Y_%m_%d_%H_%M") + '.geojson'
+        with open(output_file_name, 'wt') as out_file:
+            geo_json = {
+                'type': 'FeatureCollection',
+                'features': feature_list
+            }
+            out_file.write(json.dumps(geo_json, indent=1))
+        print('Written ', output_file_name)
 
         # TODO: return as output
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
