@@ -42,7 +42,8 @@ from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFolderDestination,
-                       QgsProcessingParameterNumber)
+                       QgsProcessingParameterNumber,
+                       QgsRasterLayer)
 
 
 # https://www.qgistutorials.com/en/docs/3/processing_python_plugin.html
@@ -125,11 +126,15 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         window_size = self.parameterAsInt(parameters, self.INPUT_LIMIT, context)
         dest_file = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
         sl_rect = source_layer.extent()  # use to transform coordinates
+        raster_layer = QgsRasterLayer(source_layer.source())
+        crs = raster_layer.crs().authid()
 
         print('Window size: ', window_size)
+
         print('Layer: ' + str(source_layer))
-        print('Dimensions: ', source_layer.width(), ' x ', source_layer.height())
         print('Extent: ', sl_rect.xMinimum(), sl_rect.yMinimum(), sl_rect.width(), sl_rect.height())
+        print('CRS: ', crs)
+        print('Dimensions: ', source_layer.width(), ' x ', source_layer.height())
 
         source_provider = source_layer.dataProvider()
         ds_uri = str(source_provider.dataSourceUri())
@@ -206,7 +211,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                                 "properties": json_boxes[b]
                             }
                             feature_list.append(feature)
-                        # break  # TODO: remove
+                        break  # TODO: remove
                     else:
                         print('Error: ', resp.status_code)
 
@@ -214,7 +219,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 print('Processed part: ', count, ' / ', total)
 
                 feedback.setProgress(int(count / total * 100))
-            # break  # TODO: remove
+            break  # TODO: remove
 
         # write to file
         current_datetime = datetime.datetime.now()
@@ -222,7 +227,13 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         with open(output_file_name, 'wt') as out_file:
             geo_json = {
                 'type': 'FeatureCollection',
-                'features': feature_list
+                'features': feature_list,
+                'crs': {
+                    "type": "name",
+                    "properties": {
+                        "name": crs
+                    }
+                }
             }
             out_file.write(json.dumps(geo_json, indent=1))
         print('Written ', output_file_name)
