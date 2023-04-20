@@ -68,8 +68,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         with some other properties.
         """
 
-        print('initAlgorithm')
-
         # We add the input vector features source. It can have any kind of
         # geometry.
         self.addParameter(
@@ -211,7 +209,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                                 "properties": json_boxes[b]
                             }
                             feature_list.append(feature)
-                        break  # TODO: remove
+                        # break  # TODO: remove
                     else:
                         print('Error: ', resp.status_code)
 
