@@ -62,14 +62,16 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
     INPUT_LIMIT = 'INPUT_LIMIT'
 
+    MSG_SRC = 'DeepForestPluginAlgorithm'
+    MSG_INFO = 0
+
     def initAlgorithm(self, config):
         """
         Here we define the inputs and output of the algorithm, along
         with some other properties.
         """
 
-        # We add the input vector features source. It can have any kind of
-        # geometry.
+        # We add the input features source, it has to be a raster
         self.addParameter(
             QgsProcessingParameterRasterLayer(
                 self.INPUT,
@@ -92,9 +94,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             )
         )
 
-        # We add a feature sink in which to store our processed features (this
-        # usually takes the form of a newly created vector layer when the
-        # algorithm is run in QGIS).
+        # Output parameter is a folder on the users computer
         self.addParameter(
             QgsProcessingParameterFolderDestination(
                 self.OUTPUT,
@@ -114,38 +114,40 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         Here is where the processing itself takes place.
         """
 
-        print('processAlgorithm')
+        feedback.pushInfo('Processing started')
         feedback.setProgress(0)
+
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
 
         source_layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
         window_size = self.parameterAsInt(parameters, self.INPUT_LIMIT, context)
-        dest_file = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
+        dest_folder = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
         sl_rect = source_layer.extent()  # use to transform coordinates
         raster_layer = QgsRasterLayer(source_layer.source())
         crs = raster_layer.crs().authid()
 
-        print('Window size: ', window_size)
+        feedback.pushInfo('Tree detection window size: {}'.format(window_size))
 
-        print('Layer: ' + str(source_layer))
-        print('Extent: ', sl_rect.xMinimum(), sl_rect.yMinimum(), sl_rect.width(), sl_rect.height())
-        print('CRS: ', crs)
-        print('Dimensions: ', source_layer.width(), ' x ', source_layer.height())
+        feedback.pushInfo('Layer: ' + str(source_layer))
+        feedback.pushInfo('CRS: {}'.format(crs))
+        feedback.pushInfo('Extent: x:{:.2f} y:{:.2f} w:{:.2f} h:{:.2f}'
+                          .format(sl_rect.xMinimum(), sl_rect.yMinimum(), sl_rect.width(), sl_rect.height()))
+        feedback.pushInfo('Dimensions: {} x {}'.format(source_layer.width(), source_layer.height()))
 
         source_provider = source_layer.dataProvider()
         ds_uri = str(source_provider.dataSourceUri())
         ds = gdal.Open(ds_uri)
-        print('RasterCount  ', ds.RasterCount, ' bands')
+        feedback.pushInfo('RasterCount: {} bands'.format(ds.RasterCount))
 
         arr_1 = ds.GetRasterBand(1).ReadAsArray()
         arr_2 = ds.GetRasterBand(2).ReadAsArray()
         arr_3 = ds.GetRasterBand(3).ReadAsArray()
         three_band = np.array([arr_1, arr_2, arr_3])
         three_band = np.transpose(three_band, (1, 2, 0))
-        print('Image (W,H,D): ' + str(three_band.shape))
-        print('Destination file: ', dest_file)
+        feedback.pushInfo('Image (W,H,D): ' + str(three_band.shape))
+        feedback.pushInfo('Destination folder: {}'.format(dest_folder))
 
         slicing = 3500
 
@@ -157,7 +159,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         slice_v = math.ceil(sl_height / part_count_v)
         slice_h = math.ceil(sl_width / part_count_h)
 
-        print('Slice size: ', slice_v, ' by ', slice_h)
+        feedback.pushInfo('Slice size: {} x {}'.format(slice_v, slice_h))
 
         total = part_count_v * part_count_h
         count = 0
@@ -171,12 +173,13 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 x_max = x0 + slice_h
                 part = three_band[y0:y_max, x0:x_max, 0:3]
                 img = Image.fromarray(part, 'RGB')
-                img_file_name = dest_file + '/part_' + str(y_max) + '_' + str(x_max) + '.jpg'
+                img_file_name = dest_folder + '/part_' + str(y_max) + '_' + str(x_max) + '.jpg'
                 img.save(img_file_name, quality=90, optimize=True, subsampling=0)
 
                 with open(img_file_name, 'rb') as img_file:
                     files = {'file': img_file}
                     resp = requests.post('http://10.125.93.137:5000/tree_rects', files=files)
+
                     if resp.status_code == 200:
                         str_content = resp.content.decode('utf-8')
                         json_boxes = json.loads(str_content)
@@ -209,19 +212,18 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                                 "properties": json_boxes[b]
                             }
                             feature_list.append(feature)
-                        # break  # TODO: remove
                     else:
-                        print('Error: ', resp.status_code)
+                        feedback.pushInfo('Error: {}'.format(resp.status_code))
 
                 count = count + 1
-                print('Processed part: ', count, ' / ', total)
+                feedback.pushInfo('Processed part: {}/{}'.format(count, total))
 
                 feedback.setProgress(int(count / total * 100))
             break  # TODO: remove
 
         # write to file
         current_datetime = datetime.datetime.now()
-        output_file_name = dest_file + '/trees_' + current_datetime.strftime("%Y_%m_%d_%H_%M") + '.geojson'
+        output_file_name = dest_folder + '/trees_' + current_datetime.strftime("%Y_%m_%d_%H_%M") + '.geojson'
         with open(output_file_name, 'wt') as out_file:
             geo_json = {
                 'type': 'FeatureCollection',
@@ -234,7 +236,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 }
             }
             out_file.write(json.dumps(geo_json, indent=1))
-        print('Written ', output_file_name)
+        feedback.pushInfo('Written {}'.format(output_file_name))
+        feedback.setProgress(1)
 
         # TODO: return as output
         # (sink, dest_id) = self.parameterAsRasterLayer(parameters, self.OUTPUT, context, None, None, None)
