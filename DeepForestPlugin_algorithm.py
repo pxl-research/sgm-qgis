@@ -166,6 +166,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         feature_list = []
 
         for y0 in range(0, sl_height, slice_v):
+            if feedback.isCanceled():
+                break
             for x0 in range(0, sl_width, slice_h):
                 if feedback.isCanceled():
                     break
@@ -219,7 +221,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 feedback.pushInfo('Processed part: {}/{}'.format(count, total))
 
                 feedback.setProgress(int(count / total * 100))
-            break  # TODO: remove
 
         # write to file
         current_datetime = datetime.datetime.now()
