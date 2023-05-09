@@ -28,6 +28,7 @@ tags=python
 homepage=http://drones.pxl.be
 category=Analysis
 icon=icon.png
+# https://www.iconpacks.net/free-icon/tree-1578.html
 # experimental flag
 experimental=True
 
