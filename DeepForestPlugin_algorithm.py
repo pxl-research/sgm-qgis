@@ -36,9 +36,11 @@ import math
 
 import numpy as np
 import requests
+from . import resources
 from PIL import Image
 from osgeo import gdal
 from qgis.PyQt.QtCore import QCoreApplication
+from qgis.PyQt.QtGui import QIcon
 from qgis.core import (QgsProcessingAlgorithm,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterFolderDestination,
@@ -53,6 +55,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     All Processing algorithms should extend the QgsProcessingAlgorithm
     class.
     """
+
+    def icon(self):
+        return QIcon(':/plugins/deepforestplugin/icon.png')
 
     # Constants used to refer to parameters and outputs. They will be
     # used when calling the algorithm from another algorithm, or when
