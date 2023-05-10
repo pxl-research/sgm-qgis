@@ -97,7 +97,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 defaultValue=3500,
                 optional=True,
                 minValue=2000,
-                maxValue=8000,
+                maxValue=15000,
             )
         )
         self.parameterDefinition(self.INPUT_TILE_SLICE).setHelp(
@@ -192,6 +192,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo('Processing started')
         feedback.setProgress(0)
 
+        session = requests.Session()
+        session.headers.update({'Accept': 'application/json'})
+
         # get parameters
         source_layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
         dest_folder = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
@@ -212,7 +215,10 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             settings['iou_threshold'] = i_iou_thresh
         if bool(settings):
             headers = {'Content-Type': 'application/json'}
-            resp = requests.post(self.BASE_URL + 'settings', headers=headers, data=json.dumps(settings))
+            resp = session.post(self.BASE_URL + 'settings',
+                                headers=headers,
+                                data=json.dumps(settings),
+                                cookies={'session': 'deepforest_plugin'})
             if resp.status_code == 200:
                 feedback.pushInfo('Applied custom settings: {}'.format(settings))
             else:
@@ -274,7 +280,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                 with open(img_file_name, 'rb') as img_file:
                     files = {'file': img_file}
-                    resp = requests.post(self.BASE_URL + 'tree_rects', files=files)
+                    resp = session.post(self.BASE_URL + 'tree_rects',
+                                        files=files,
+                                        cookies={'session': 'deepforest_plugin'})
 
                     if resp.status_code == 200:
                         str_content = resp.content.decode('utf-8')
