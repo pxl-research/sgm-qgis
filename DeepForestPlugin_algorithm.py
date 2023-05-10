@@ -36,7 +36,6 @@ import math
 
 import numpy as np
 import requests
-from . import resources
 from PIL import Image
 from osgeo import gdal
 from qgis.PyQt.QtCore import QCoreApplication
@@ -55,9 +54,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     All Processing algorithms should extend the QgsProcessingAlgorithm
     class.
     """
-
-    def icon(self):
-        return QIcon(':/plugins/deepforestplugin/icon.png')
 
     # Constants used to refer to parameters and outputs. They will be
     # used when calling the algorithm from another algorithm, or when
@@ -353,6 +349,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         #     sink.addFeature(feature, QgsFeatureSink.FastInsert)
 
         return {self.OUTPUT: None}
+
+    def icon(self):
+        return QIcon(':/plugins/deepforestplugin/icon.png')
 
     def name(self):
         """
