@@ -63,6 +63,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     INPUT_LIMIT = 'INPUT_LIMIT'
     INPUT_TILE_SLICE = 'INPUT_TILE'
     INPUT_PATCH_SIZE = 'INPUT_WINDOW'
+    INPUT_OVERLAP = 'INPUT_PATCH_OVERLAP'
     INPUT_THRESH = 'INPUT_THRESH'
     INPUT_IOU_THRESH = 'INPUT_IOU_THRESH'
 
@@ -118,11 +119,28 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             'It should be about equivalent to 40m in the real world. ' +
             'Defaults to 900')
 
+        # Add Patch size parameter for algorithm
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                self.INPUT_OVERLAP,
+                self.tr('Overlap between patches'),
+                type=QgsProcessingParameterNumber.Double,
+                defaultValue=0.4,
+                optional=True,
+                minValue=0.05,
+                maxValue=0.95,
+            )
+        )
+        self.parameterDefinition(self.INPUT_PATCH_SIZE).setHelp(
+            'The amount of overlap between patches. ' +
+            'Less overlap is quicker, but more prone to errors. ' +
+            'Defaults to 0.4')
+
         # Add threshold parameter for algorithm
         self.addParameter(
             QgsProcessingParameterNumber(
                 self.INPUT_THRESH,
-                self.tr('Tree detection threshold (default 0.5)'),
+                self.tr('Tree detection threshold'),
                 type=QgsProcessingParameterNumber.Double,
                 defaultValue=0.5,
                 optional=True,
@@ -131,7 +149,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             )
         )
         self.parameterDefinition(self.INPUT_THRESH).setHelp(
-            'Below this value, a detected object will not be classified as a tree. Defaults to 0.5')
+            'Below this value, a detected object will not be classified as a tree. ' +
+            'Defaults to 0.5')
 
         # Add overlap threshold parameter for algorithm
         self.addParameter(
@@ -146,8 +165,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             )
         )
         self.parameterDefinition(self.INPUT_IOU_THRESH).setHelp(
-            'Minimum iou overlap among predictions between windows to be suppressed. Defaults to 0.5.' +
-            'Lower values suppress more boxes at edges.')
+            'Minimum iou overlap among predictions between windows to be considered the same tree. ' +
+            'Lower values suppress more boxes at edges.' +
+            'Defaults to 0.5.')
 
         # Output parameter is a folder on the users computer
         self.addParameter(
@@ -174,10 +194,28 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         # get parameters
         source_layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
         dest_folder = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
-        i_patch_size = self.parameterAsInt(parameters, self.INPUT_PATCH_SIZE, context)
         i_slice_size = self.parameterAsInt(parameters, self.INPUT_TILE_SLICE, context)
-        i_thresh = self.parameterAsInt(parameters, self.INPUT_THRESH, context)
-        i_iou_thresh = self.parameterAsInt(parameters, self.INPUT_IOU_THRESH, context)
+        i_patch_size = self.parameterAsInt(parameters, self.INPUT_PATCH_SIZE, context)
+        i_patch_overlap = self.parameterAsDouble(parameters, self.INPUT_OVERLAP, context)
+        i_thresh = self.parameterAsDouble(parameters, self.INPUT_THRESH, context)
+        i_iou_thresh = self.parameterAsDouble(parameters, self.INPUT_IOU_THRESH, context)
+
+        settings = {}
+        if i_patch_size is not None:
+            settings['patch_size'] = i_patch_size
+        if i_patch_overlap is not None:
+            settings['patch_overlap'] = i_patch_overlap
+        if i_thresh is not None:
+            settings['thresh'] = i_thresh
+        if i_iou_thresh is not None:
+            settings['iou_threshold'] = i_iou_thresh
+        if bool(settings):
+            headers = {'Content-Type': 'application/json'}
+            resp = requests.post('http://10.125.93.137:5000/settings', headers=headers, data=json.dumps(settings))
+            if resp.status_code == 200:
+                feedback.pushInfo('Applied custom settings: {}'.format(settings))
+            else:
+                feedback.pushInfo('Could not apply settings: {}'.format(settings))
 
         sl_rect = source_layer.extent()  # use to transform coordinates
         raster_layer = QgsRasterLayer(source_layer.source())
