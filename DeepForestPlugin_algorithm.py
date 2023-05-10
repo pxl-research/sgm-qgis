@@ -36,6 +36,7 @@ import math
 
 import numpy as np
 import requests
+from . import resources
 from PIL import Image
 from osgeo import gdal
 from qgis.PyQt.QtCore import QCoreApplication
@@ -70,6 +71,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
     MSG_SRC = 'DeepForestPluginAlgorithm'
     MSG_INFO = 0
+    BASE_URL = 'http://10.125.93.137:5000/'
 
     def initAlgorithm(self, config):
         """
@@ -176,8 +178,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 self.OUTPUT,
                 self.tr('Output folder'),
                 optional=False,
-                # fileFilter='Image files (*.png)'
-                # fileFilter='GeoJSON files (*.json)'
             )
         )
         self.parameterDefinition(self.OUTPUT).setHelp(
@@ -212,7 +212,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             settings['iou_threshold'] = i_iou_thresh
         if bool(settings):
             headers = {'Content-Type': 'application/json'}
-            resp = requests.post('http://10.125.93.137:5000/settings', headers=headers, data=json.dumps(settings))
+            resp = requests.post(self.BASE_URL + 'settings', headers=headers, data=json.dumps(settings))
             if resp.status_code == 200:
                 feedback.pushInfo('Applied custom settings: {}'.format(settings))
             else:
@@ -274,7 +274,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                 with open(img_file_name, 'rb') as img_file:
                     files = {'file': img_file}
-                    resp = requests.post('http://10.125.93.137:5000/tree_rects', files=files)
+                    resp = requests.post(self.BASE_URL + 'tree_rects', files=files)
 
                     if resp.status_code == 200:
                         str_content = resp.content.decode('utf-8')
