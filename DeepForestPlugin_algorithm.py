@@ -60,8 +60,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
     OUTPUT = 'OUTPUT'
     INPUT = 'INPUT'
-    INPUT_TILE = 'INPUT_TILE'
-    INPUT_WINDOW = 'INPUT_WINDOW'
+    INPUT_LIMIT = 'INPUT_LIMIT'
+    INPUT_TILE_SLICE = 'INPUT_TILE'
+    INPUT_PATCH_SIZE = 'INPUT_WINDOW'
     INPUT_THRESH = 'INPUT_THRESH'
     INPUT_IOU_THRESH = 'INPUT_IOU_THRESH'
 
@@ -86,7 +87,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         # Add Tile slicing parameter for algorithm
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.INPUT_TILE,
+                self.INPUT_TILE_SLICE,
                 self.tr('Tile slicing size'),
                 type=QgsProcessingParameterNumber.Integer,
                 defaultValue=3500,
@@ -95,7 +96,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 maxValue=8000,
             )
         )
-        self.parameterDefinition(self.INPUT_TILE).setHelp(
+        self.parameterDefinition(self.INPUT_TILE_SLICE).setHelp(
             'The map is cut into slices before being processed by the tree detector. ' +
             'Smaller tiles process more quickly but have more problems at the edges. ' +
             'Defaults to 3500')
@@ -103,7 +104,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         # Add Patch size parameter for algorithm
         self.addParameter(
             QgsProcessingParameterNumber(
-                self.INPUT_WINDOW,
+                self.INPUT_PATCH_SIZE,
                 self.tr('Patch size in pixels'),
                 type=QgsProcessingParameterNumber.Integer,
                 defaultValue=900,
@@ -112,7 +113,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 maxValue=3000,
             )
         )
-        self.parameterDefinition(self.INPUT_WINDOW).setHelp(
+        self.parameterDefinition(self.INPUT_PATCH_SIZE).setHelp(
             'The algorithm scans for trees in a window of this size. ' +
             'It should be about equivalent to 40m in the real world. ' +
             'Defaults to 900')
@@ -167,25 +168,22 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     # https://gis.stackexchange.com/questions/282773/writing-a-python-processing-script-with-qgis-3-0
     # https://gis.stackexchange.com/questions/358230/programmatically-enable-disable-input-parameters-in-a-qgis-processing-plugin
     def processAlgorithm(self, parameters, context, feedback):
-        """
-        Here is where the processing itself takes place.
-        """
-
         feedback.pushInfo('Processing started')
         feedback.setProgress(0)
 
-        # Retrieve the feature source and sink. The 'dest_id' variable is used
-        # to uniquely identify the feature sink, and must be included in the
-        # dictionary returned by the processAlgorithm function.
-
+        # get parameters
         source_layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
-        window_size = self.parameterAsInt(parameters, self.INPUT_LIMIT, context)
         dest_folder = self.parameterAsFileOutput(parameters, self.OUTPUT, context)
+        i_patch_size = self.parameterAsInt(parameters, self.INPUT_PATCH_SIZE, context)
+        i_slice_size = self.parameterAsInt(parameters, self.INPUT_TILE_SLICE, context)
+        i_thresh = self.parameterAsInt(parameters, self.INPUT_THRESH, context)
+        i_iou_thresh = self.parameterAsInt(parameters, self.INPUT_IOU_THRESH, context)
+
         sl_rect = source_layer.extent()  # use to transform coordinates
         raster_layer = QgsRasterLayer(source_layer.source())
         crs = raster_layer.crs().authid()
 
-        feedback.pushInfo('Tree detection window size: {}'.format(window_size))
+        feedback.pushInfo('Tree detection window size: {}'.format(i_patch_size))
 
         feedback.pushInfo('Layer: ' + str(source_layer))
         feedback.pushInfo('CRS: {}'.format(crs))
@@ -206,7 +204,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo('Image (W,H,D): ' + str(three_band.shape))
         feedback.pushInfo('Destination folder: {}'.format(dest_folder))
 
-        slicing = 3500
+        slicing = i_slice_size
 
         # if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
         sl_height = three_band.shape[0]
