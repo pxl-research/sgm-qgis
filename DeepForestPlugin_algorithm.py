@@ -128,7 +128,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 self.INPUT_OVERLAP,
                 self.tr('Overlap between patches'),
                 type=QgsProcessingParameterNumber.Double,
-                defaultValue=0.4,
+                defaultValue=0.3,
                 optional=True,
                 minValue=0.05,
                 maxValue=0.95,
@@ -137,7 +137,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         self.parameterDefinition(self.INPUT_PATCH_SIZE).setHelp(
             'The amount of overlap between patches. ' +
             'Less overlap is quicker, but more prone to errors. ' +
-            'Defaults to 0.4')
+            'Defaults to 0.3')
 
         # Add threshold parameter for algorithm
         self.addParameter(
@@ -161,7 +161,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 self.INPUT_IOU_THRESH,
                 self.tr('Overlap detection threshold'),
                 type=QgsProcessingParameterNumber.Double,
-                defaultValue=0.5,
+                defaultValue=0.4,
                 optional=True,
                 minValue=0.05,
                 maxValue=0.95,
@@ -170,7 +170,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         self.parameterDefinition(self.INPUT_IOU_THRESH).setHelp(
             'Minimum iou overlap among predictions between windows to be considered the same tree. ' +
             'Lower values suppress more boxes at edges.' +
-            'Defaults to 0.5.')
+            'Defaults to 0.5')
 
         # Output parameter is a folder on the users computer
         self.addParameter(
