@@ -258,8 +258,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         slice_v = math.ceil(sl_height / part_count_v)
         slice_h = math.ceil(sl_width / part_count_h)
 
-        total = part_count_v * part_count_h
-        feedback.pushInfo('Slicing into {} parts of {} x {}'.format(total, slice_h, slice_v))
+        total_parts = part_count_v * part_count_h
+        feedback.pushInfo('Slicing into {} parts of {} x {}'.format(total_parts, slice_h, slice_v))
 
         count = 0
         feature_list = []
@@ -329,13 +329,16 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                 os.remove(img_file_name)
                 count = count + 1
-                feedback.pushInfo('Processed part: {}/{}'.format(count, total))
+                feedback.pushInfo('Processed part: {}/{}'.format(count, total_parts))
 
-                feedback.setProgress(int(count / total * 100))
+                feedback.setProgress(int(count / total_parts * 100))
 
         # write to file
         current_datetime = datetime.datetime.now()
-        output_file_name = dest_folder + '/trees_' + current_datetime.strftime("%Y_%m_%d_%H_%M") + '.geojson'
+        time_str = current_datetime.strftime("%Y-%m-%d_%Hh%M")
+        output_file_name = '{df}/trees_{ts}.geojson'.format(df=dest_folder, ts=time_str)
+        settings_file_name = '{df}/settings_{ts}.json'.format(df=dest_folder, ts=time_str)
+
         with open(output_file_name, 'wt') as out_file:
             geo_json = {
                 'type': 'FeatureCollection',
@@ -348,6 +351,13 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 }
             }
             out_file.write(json.dumps(geo_json, indent=1))
+
+        with open(settings_file_name, 'wt') as out_file:
+            settings['filename'] = output_file_name
+            settings['slice_size'] = i_slice_size
+            settings['parts'] = total_parts
+            out_file.write(json.dumps(settings, indent=1))
+
         feedback.pushInfo('Written {}'.format(output_file_name))
         feedback.setProgress(1)
 
