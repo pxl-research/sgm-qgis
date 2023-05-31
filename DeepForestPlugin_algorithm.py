@@ -33,7 +33,7 @@ __revision__ = '$Format:%H$'
 import datetime
 import json
 import math
-
+import os
 import numpy as np
 import requests
 from . import resources
@@ -251,7 +251,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
         slicing = i_slice_size
 
-        # if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
         sl_height = three_band.shape[0]
         sl_width = three_band.shape[1]
         part_count_v = math.ceil(sl_height / slicing)
@@ -259,9 +258,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         slice_v = math.ceil(sl_height / part_count_v)
         slice_h = math.ceil(sl_width / part_count_h)
 
-        feedback.pushInfo('Slice size: {} x {}'.format(slice_v, slice_h))
-
         total = part_count_v * part_count_h
+        feedback.pushInfo('Slicing into {} parts of {} x {}'.format(total, slice_h, slice_v))
+
         count = 0
         feature_list = []
 
@@ -328,6 +327,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                     else:
                         feedback.pushInfo('Error: {}'.format(resp.status_code))
 
+                os.remove(img_file_name)
                 count = count + 1
                 feedback.pushInfo('Processed part: {}/{}'.format(count, total))
 
