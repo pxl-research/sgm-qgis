@@ -249,6 +249,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo('Destination folder: {}'.format(dest_folder))
 
         slicing = i_slice_size
+        slice_overlap = 1.1  # percentage overlap
 
         sl_height = three_band.shape[0]
         sl_width = three_band.shape[1]
@@ -269,11 +270,11 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             for x0 in range(0, sl_width, slice_h):
                 if feedback.isCanceled():
                     break
-                y_max = y0 + slice_v
-                x_max = x0 + slice_h
+                y_max = y0 + math.ceil(slice_v * slice_overlap)
+                x_max = x0 + math.ceil(slice_h * slice_overlap)
                 part = three_band[y0:y_max, x0:x_max, 0:3]
                 img = Image.fromarray(part, 'RGB')
-                img_file_name = dest_folder + '/part_' + str(y_max) + '_' + str(x_max) + '.jpg'
+                img_file_name = dest_folder + '/part_' + str(x0) + '_' + str(y0) + '.jpg'
                 img.save(img_file_name, quality=90, optimize=True, subsampling=0)
 
                 with open(img_file_name, 'rb') as img_file:
@@ -300,10 +301,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                             ymax = sl_rect.yMinimum() + (ymax * sl_rect.height())
 
                             properties = {
-                                'stroke': '#00ff00',
-                                'stroke-width': 1,
-                                'fill': '#00ff00',
-                                'fill-opacity': 0.5
+                                'slice': count,
+                                'tree': b
                             }
 
                             properties.update(json_boxes[b])
