@@ -234,7 +234,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo('CRS: {}'.format(crs))
         feedback.pushInfo('Extent: x:{:.2f} y:{:.2f} w:{:.2f} h:{:.2f}'
                           .format(sl_rect.xMinimum(), sl_rect.yMinimum(), sl_rect.width(), sl_rect.height()))
-        feedback.pushInfo('Dimensions: {} x {}'.format(source_layer.width(), source_layer.height()))
+        feedback.pushInfo('Image dimensions: {} x {}'.format(source_layer.width(), source_layer.height()))
 
         source_provider = source_layer.dataProvider()
         ds_uri = str(source_provider.dataSourceUri())
@@ -246,7 +246,6 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         arr_3 = ds.GetRasterBand(3).ReadAsArray()
         three_band = np.array([arr_1, arr_2, arr_3])
         three_band = np.transpose(three_band, (1, 2, 0))
-        feedback.pushInfo('Image (W,H,D): ' + str(three_band.shape))
         feedback.pushInfo('Destination folder: {}'.format(dest_folder))
 
         slicing = i_slice_size
@@ -335,11 +334,12 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
         # write to file
         current_datetime = datetime.datetime.now()
-        time_str = current_datetime.strftime("%Y-%m-%d_%Hh%M")
-        output_file_name = '{df}/trees_{ts}.geojson'.format(df=dest_folder, ts=time_str)
-        settings_file_name = '{df}/settings_{ts}.json'.format(df=dest_folder, ts=time_str)
+        time_str = current_datetime.strftime("%Y-%m-%d_%H%M")
+        output_file_name = 'trees_{ts}.geojson'.format(ts=time_str)
+        output_file_path = '{df}/{fn}'.format(df=dest_folder, fn=output_file_name)
+        settings_file_path = '{df}/settings_{ts}.json'.format(df=dest_folder, ts=time_str)
 
-        with open(output_file_name, 'wt') as out_file:
+        with open(output_file_path, 'wt') as out_file:
             geo_json = {
                 'type': 'FeatureCollection',
                 'features': feature_list,
@@ -352,13 +352,13 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             }
             out_file.write(json.dumps(geo_json, indent=1))
 
-        with open(settings_file_name, 'wt') as out_file:
+        with open(settings_file_path, 'wt') as out_file:
             settings['filename'] = output_file_name
             settings['slice_size'] = i_slice_size
             settings['parts'] = total_parts
             out_file.write(json.dumps(settings, indent=1))
 
-        feedback.pushInfo('Written {}'.format(output_file_name))
+        feedback.pushInfo('Written {}'.format(output_file_path))
         feedback.setProgress(1)
 
         # TODO: return as output
