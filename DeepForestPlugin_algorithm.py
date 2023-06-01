@@ -50,6 +50,40 @@ from qgis.core import (QgsProcessingAlgorithm,
 
 # https://www.qgistutorials.com/en/docs/3/processing_python_plugin.html
 # https://docs.qgis.org/3.22/en/docs/pyqgis_developer_cookbook/cheat_sheet.html#layers
+def overlap(rect_1, rect_2):
+    r1_right = max(rect_1['xg_0'], rect_1['xg_1'])
+    r1_left = min(rect_1['xg_0'], rect_1['xg_1'])
+    r1_top = max(rect_1['yg_0'], rect_1['yg_1'])
+    r1_bottom = min(rect_1['yg_0'], rect_1['yg_1'])
+
+    r1_mx = (r1_left + r1_right) / 2
+    r1_my = (r1_bottom + r1_top) / 2
+
+    r2_right = max(rect_2['xg_0'], rect_2['xg_1'])
+    r2_left = min(rect_2['xg_0'], rect_2['xg_1'])
+    r2_top = max(rect_2['yg_0'], rect_2['yg_1'])
+    r2_bottom = min(rect_2['yg_0'], rect_2['yg_1'])
+
+    r2_mx = (r2_left + r2_right) / 2
+    r2_my = (r2_bottom + r2_top) / 2
+
+    if r1_left <= r2_mx <= r1_right and r1_bottom <= r2_my <= r1_top:
+        return True
+    if r2_left <= r1_mx <= r2_right and r2_bottom <= r1_my <= r2_top:
+        return True
+
+    return False
+
+
+def get_area(rect_1):
+    r1_right = max(rect_1['xg_0'], rect_1['xg_1'])
+    r1_left = min(rect_1['xg_0'], rect_1['xg_1'])
+    r1_top = max(rect_1['yg_0'], rect_1['yg_1'])
+    r1_bottom = min(rect_1['yg_0'], rect_1['yg_1'])
+
+    return (r1_right - r1_left) * (r1_top - r1_bottom)
+
+
 class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     """
     All Processing algorithms should extend the QgsProcessingAlgorithm
@@ -302,7 +336,11 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                             properties = {
                                 'slice': count,
-                                'tree': b
+                                'tree': b,
+                                'xg_0': xmin,
+                                'xg_1': xmax,
+                                'yg_0': ymin,
+                                'yg_1': ymax
                             }
 
                             properties.update(json_boxes[b])
@@ -331,6 +369,32 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
 
                 feedback.setProgress(int(count / total_parts * 100))
 
+        # remove overlapping rectangles from list
+        dupe_count = 0
+        idx_1 = 0
+        while idx_1 < len(feature_list):
+            idx_2 = idx_1 + 1  # starting index
+            while idx_2 < len(feature_list):
+                if overlap(feature_list[idx_1]['properties'],
+                           feature_list[idx_2]['properties']):
+                    dupe_count = dupe_count + 1
+                    # print("{} {} and {} {}".format(
+                    #     feature_list[idx_1]['properties']['slice'],
+                    #     feature_list[idx_1]['properties']['tree'],
+                    #     feature_list[idx_2]['properties']['slice'],
+                    #     feature_list[idx_2]['properties']['tree']))
+                    # delete smallest of the two rectangles
+                    area_r1 = get_area(feature_list[idx_1]['properties'])
+                    area_r2 = get_area(feature_list[idx_2]['properties'])
+                    if area_r1 > area_r2:
+                        feature_list.pop(idx_2)
+                        idx_2 = idx_2 - 1  # this index now points to another item -> check again
+                    else:
+                        feature_list.pop(idx_1)
+                        idx_1 = idx_1 - 1  # this index now points to another item -> check again
+                idx_2 = idx_2 + 1
+            idx_1 = idx_1 + 1
+
         # write to file
         current_datetime = datetime.datetime.now()
         time_str = current_datetime.strftime("%Y-%m-%d_%H%M")
@@ -355,6 +419,8 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             settings['filename'] = output_file_name
             settings['slice_size'] = i_slice_size
             settings['parts'] = total_parts
+            settings['overlapping_trees_removed'] = dupe_count
+            settings['total_trees'] = len(feature_list)
             out_file.write(json.dumps(settings, indent=1))
 
         feedback.pushInfo('Written {}'.format(output_file_path))
