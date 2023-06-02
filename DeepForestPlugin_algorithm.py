@@ -34,9 +34,10 @@ import datetime
 import json
 import math
 import os
+from . import resources
+
 import numpy as np
 import requests
-from . import resources
 from PIL import Image
 from osgeo import gdal
 from qgis.PyQt.QtCore import QCoreApplication
@@ -389,9 +390,13 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                     if area_r1 > area_r2:
                         feature_list.pop(idx_2)
                         idx_2 = idx_2 - 1  # this index now points to another item -> check again
+                        if idx_2 < 0 or idx_2 >= len(feature_list):
+                            break
                     else:
                         feature_list.pop(idx_1)
                         idx_1 = idx_1 - 1  # this index now points to another item -> check again
+                        if idx_1 < 0 or idx_1 >= len(feature_list):
+                            break
                 idx_2 = idx_2 + 1
             idx_1 = idx_1 + 1
 
