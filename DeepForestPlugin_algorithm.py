@@ -33,10 +33,11 @@ __revision__ = '$Format:%H$'
 import datetime
 import json
 import math
+import os
+from . import resources
 
 import numpy as np
 import requests
-from . import resources
 from PIL import Image
 from osgeo import gdal
 from qgis.PyQt.QtCore import QCoreApplication
@@ -50,6 +51,40 @@ from qgis.core import (QgsProcessingAlgorithm,
 
 # https://www.qgistutorials.com/en/docs/3/processing_python_plugin.html
 # https://docs.qgis.org/3.22/en/docs/pyqgis_developer_cookbook/cheat_sheet.html#layers
+def overlap(rect_1, rect_2):
+    r1_right = max(rect_1['xg_0'], rect_1['xg_1'])
+    r1_left = min(rect_1['xg_0'], rect_1['xg_1'])
+    r1_top = max(rect_1['yg_0'], rect_1['yg_1'])
+    r1_bottom = min(rect_1['yg_0'], rect_1['yg_1'])
+
+    r1_mx = (r1_left + r1_right) / 2
+    r1_my = (r1_bottom + r1_top) / 2
+
+    r2_right = max(rect_2['xg_0'], rect_2['xg_1'])
+    r2_left = min(rect_2['xg_0'], rect_2['xg_1'])
+    r2_top = max(rect_2['yg_0'], rect_2['yg_1'])
+    r2_bottom = min(rect_2['yg_0'], rect_2['yg_1'])
+
+    r2_mx = (r2_left + r2_right) / 2
+    r2_my = (r2_bottom + r2_top) / 2
+
+    if r1_left <= r2_mx <= r1_right and r1_bottom <= r2_my <= r1_top:
+        return True
+    if r2_left <= r1_mx <= r2_right and r2_bottom <= r1_my <= r2_top:
+        return True
+
+    return False
+
+
+def get_area(rect_1):
+    r1_right = max(rect_1['xg_0'], rect_1['xg_1'])
+    r1_left = min(rect_1['xg_0'], rect_1['xg_1'])
+    r1_top = max(rect_1['yg_0'], rect_1['yg_1'])
+    r1_bottom = min(rect_1['yg_0'], rect_1['yg_1'])
+
+    return (r1_right - r1_left) * (r1_top - r1_bottom)
+
+
 class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
     """
     All Processing algorithms should extend the QgsProcessingAlgorithm
@@ -234,7 +269,7 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         feedback.pushInfo('CRS: {}'.format(crs))
         feedback.pushInfo('Extent: x:{:.2f} y:{:.2f} w:{:.2f} h:{:.2f}'
                           .format(sl_rect.xMinimum(), sl_rect.yMinimum(), sl_rect.width(), sl_rect.height()))
-        feedback.pushInfo('Dimensions: {} x {}'.format(source_layer.width(), source_layer.height()))
+        feedback.pushInfo('Image dimensions: {} x {}'.format(source_layer.width(), source_layer.height()))
 
         source_provider = source_layer.dataProvider()
         ds_uri = str(source_provider.dataSourceUri())
@@ -246,12 +281,11 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         arr_3 = ds.GetRasterBand(3).ReadAsArray()
         three_band = np.array([arr_1, arr_2, arr_3])
         three_band = np.transpose(three_band, (1, 2, 0))
-        feedback.pushInfo('Image (W,H,D): ' + str(three_band.shape))
         feedback.pushInfo('Destination folder: {}'.format(dest_folder))
 
         slicing = i_slice_size
+        slice_overlap = 1.1  # percentage overlap
 
-        # if three_band.shape[0] > slicing * 1.1 and three_band.shape[1] > slicing * 1.1:
         sl_height = three_band.shape[0]
         sl_width = three_band.shape[1]
         part_count_v = math.ceil(sl_height / slicing)
@@ -259,9 +293,9 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
         slice_v = math.ceil(sl_height / part_count_v)
         slice_h = math.ceil(sl_width / part_count_h)
 
-        feedback.pushInfo('Slice size: {} x {}'.format(slice_v, slice_h))
+        total_parts = part_count_v * part_count_h
+        feedback.pushInfo('Slicing into {} parts of {} x {}'.format(total_parts, slice_h, slice_v))
 
-        total = part_count_v * part_count_h
         count = 0
         feature_list = []
 
@@ -271,11 +305,11 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
             for x0 in range(0, sl_width, slice_h):
                 if feedback.isCanceled():
                     break
-                y_max = y0 + slice_v
-                x_max = x0 + slice_h
+                y_max = y0 + math.ceil(slice_v * slice_overlap)
+                x_max = x0 + math.ceil(slice_h * slice_overlap)
                 part = three_band[y0:y_max, x0:x_max, 0:3]
                 img = Image.fromarray(part, 'RGB')
-                img_file_name = dest_folder + '/part_' + str(y_max) + '_' + str(x_max) + '.jpg'
+                img_file_name = dest_folder + '/part_' + str(x0) + '_' + str(y0) + '.jpg'
                 img.save(img_file_name, quality=90, optimize=True, subsampling=0)
 
                 with open(img_file_name, 'rb') as img_file:
@@ -302,10 +336,12 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                             ymax = sl_rect.yMinimum() + (ymax * sl_rect.height())
 
                             properties = {
-                                'stroke': '#00ff00',
-                                'stroke-width': 1,
-                                'fill': '#00ff00',
-                                'fill-opacity': 0.5
+                                'slice': count,
+                                'tree': b,
+                                'xg_0': xmin,
+                                'xg_1': xmax,
+                                'yg_0': ymin,
+                                'yg_1': ymax
                             }
 
                             properties.update(json_boxes[b])
@@ -328,15 +364,50 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                     else:
                         feedback.pushInfo('Error: {}'.format(resp.status_code))
 
+                os.remove(img_file_name)
                 count = count + 1
-                feedback.pushInfo('Processed part: {}/{}'.format(count, total))
+                feedback.pushInfo('Processed part: {}/{}'.format(count, total_parts))
 
-                feedback.setProgress(int(count / total * 100))
+                feedback.setProgress(int(count / total_parts * 100))
+
+        # remove overlapping rectangles from list
+        dupe_count = 0
+        idx_1 = 0
+        while idx_1 < len(feature_list):
+            idx_2 = idx_1 + 1  # starting index
+            while idx_2 < len(feature_list):
+                if overlap(feature_list[idx_1]['properties'],
+                           feature_list[idx_2]['properties']):
+                    dupe_count = dupe_count + 1
+                    # print("{} {} and {} {}".format(
+                    #     feature_list[idx_1]['properties']['slice'],
+                    #     feature_list[idx_1]['properties']['tree'],
+                    #     feature_list[idx_2]['properties']['slice'],
+                    #     feature_list[idx_2]['properties']['tree']))
+                    # delete smallest of the two rectangles
+                    area_r1 = get_area(feature_list[idx_1]['properties'])
+                    area_r2 = get_area(feature_list[idx_2]['properties'])
+                    if area_r1 > area_r2:
+                        feature_list.pop(idx_2)
+                        idx_2 = idx_2 - 1  # this index now points to another item -> check again
+                        if idx_2 < 0 or idx_2 >= len(feature_list):
+                            break
+                    else:
+                        feature_list.pop(idx_1)
+                        idx_1 = idx_1 - 1  # this index now points to another item -> check again
+                        if idx_1 < 0 or idx_1 >= len(feature_list):
+                            break
+                idx_2 = idx_2 + 1
+            idx_1 = idx_1 + 1
 
         # write to file
         current_datetime = datetime.datetime.now()
-        output_file_name = dest_folder + '/trees_' + current_datetime.strftime("%Y_%m_%d_%H_%M") + '.geojson'
-        with open(output_file_name, 'wt') as out_file:
+        time_str = current_datetime.strftime("%Y-%m-%d_%H%M")
+        output_file_name = 'trees_{ts}.geojson'.format(ts=time_str)
+        output_file_path = '{df}/{fn}'.format(df=dest_folder, fn=output_file_name)
+        settings_file_path = '{df}/settings_{ts}.json'.format(df=dest_folder, ts=time_str)
+
+        with open(output_file_path, 'wt') as out_file:
             geo_json = {
                 'type': 'FeatureCollection',
                 'features': feature_list,
@@ -348,7 +419,16 @@ class DeepForestPluginAlgorithm(QgsProcessingAlgorithm):
                 }
             }
             out_file.write(json.dumps(geo_json, indent=1))
-        feedback.pushInfo('Written {}'.format(output_file_name))
+
+        with open(settings_file_path, 'wt') as out_file:
+            settings['filename'] = output_file_name
+            settings['slice_size'] = i_slice_size
+            settings['parts'] = total_parts
+            settings['overlapping_trees_removed'] = dupe_count
+            settings['total_trees'] = len(feature_list)
+            out_file.write(json.dumps(settings, indent=1))
+
+        feedback.pushInfo('Written {}'.format(output_file_path))
         feedback.setProgress(1)
 
         # TODO: return as output
